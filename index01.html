@@ -175,21 +175,7 @@
 
 <div class="app">
 
-  <div class="control-bar">
-    <span class="label">Tier 1 preview (researcher only)</span>
-    <button class="log-toggle" id="logToggle">View log</button>
-  </div>
-
   <div class="feed" id="feed"></div>
-
-  <div class="log-panel" id="logPanel">
-    <h3>Captured interaction log (in-memory, this session only)</h3>
-    <pre id="logContent">[]</pre>
-    <div class="actions">
-      <button class="btn-download" id="downloadLog">Download JSON</button>
-      <button class="btn-close-log" id="closeLog">Close</button>
-    </div>
-  </div>
 
 </div>
 
@@ -470,14 +456,11 @@ function applyTierToDOM() {
 }
 
 function renderLog() {
-  document.getElementById("logContent").textContent = JSON.stringify(log, null, 2);
+  // Log panel UI removed for participant-facing builds; log data still accumulates
+  // in memory and is still pushed to the parent window via postMessage in logEvent().
 }
 
 function init() {
-  if (deployedMode) {
-    document.querySelector(".control-bar").style.display = "none";
-  }
-
   const feed = document.getElementById("feed");
   feed.innerHTML = ORDERED_POSTS.map(renderPost).join("");
   applyTierToDOM();
@@ -537,22 +520,6 @@ function init() {
     });
   }, { threshold: 0.6 });
   document.querySelectorAll(".post").forEach(p => observer.observe(p));
-
-  // tier selector (researcher preview only — in deployment this is fixed via embedded data)
-  // log panel
-  document.getElementById("logToggle").addEventListener("click", () => {
-    document.getElementById("logPanel").classList.add("open");
-  });
-  document.getElementById("closeLog").addEventListener("click", () => {
-    document.getElementById("logPanel").classList.remove("open");
-  });
-  document.getElementById("downloadLog").addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify(log, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "mock_feed_interaction_log.json";
-    a.click();
-  });
 
   postToParent("ready", { tier: currentTier, order: ORDERED_POSTS.map(p => p.id) });
 }
