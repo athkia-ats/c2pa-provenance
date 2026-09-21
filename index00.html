@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Provenance Label Study — Feed (Political Stimuli)</title>
+<style>
+  :root {
+    --bg: #0b0b0c;
+    --panel: #17181a;
+    --panel-2: #1f2023;
+    --text: #f2f2f2;
+    --text-dim: #b7b8bb;
+    --accent: #4fd1c5;
+    --accent-2: #ff5c7a;
+    --tier1: #6b7280;
+    --tier2: #4fd1c5;
+    --tier3: #f5b942;
+    --tier4: #ff5c7a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #050505;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+  }
+
+  .app {
+    position: relative;
+    max-width: 420px;
+    height: 100vh;
+    margin: 0 auto;
+    background: #000;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(0,0,0,0.6);
+  }
+
+  /* ---------- researcher control bar (not shown to participants) ---------- */
+  .control-bar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 40;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.75), rgba(0,0,0,0));
+    font-size: 12px;
+    pointer-events: none;
+  }
+  .control-bar * { pointer-events: auto; }
+  .control-bar .label { color: var(--text-dim); font-size: 11px; letter-spacing: .02em; }
+  .log-toggle {
+    margin-left: auto; background: rgba(255,255,255,0.08); color: var(--text-dim);
+    border: none; border-radius: 14px; padding: 5px 10px; font-size: 11px; cursor: pointer;
+  }
+
+  /* ---------- feed ---------- */
+  .feed {
+    height: 100%;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;
+  }
+  .feed::-webkit-scrollbar { display: none; }
+
+  .post {
+    position: relative;
+    height: 100%;
+    scroll-snap-align: start;
+    display: flex;
+    align-items: flex-end;
+    overflow: hidden;
+  }
+  .post-media {
+    position: absolute; inset: 0;
+    background: #000;
+  }
+  .post-media img {
+    width: 100%; height: 100%;
+    object-fit: cover; object-position: center top;
+    display: block;
+    -webkit-user-drag: none; user-select: none;
+  }
+
+
+  /* ---------- log panel ---------- */
+  .log-panel {
+    position: absolute; inset: 0; z-index: 50;
+    background: rgba(6,6,7,0.97);
+    padding: 54px 16px 16px;
+    display: none;
+    overflow-y: auto;
+  }
+  .log-panel.open { display: block; }
+  .log-panel h3 { font-size: 14px; margin: 0 0 10px; }
+  .log-panel pre {
+    font-size: 11px; color: #a9f5ec; white-space: pre-wrap; word-break: break-word;
+    background: #0e0f10; padding: 10px; border-radius: 8px; line-height: 1.5;
+  }
+  .log-panel .actions { display: flex; gap: 8px; margin-top: 12px; }
+  .log-panel button {
+    font-size: 12px; padding: 8px 12px; border-radius: 8px; border: none; cursor: pointer;
+  }
+  .btn-download { background: #fff; color: #000; }
+  .btn-close-log { background: rgba(255,255,255,0.12); color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <div class="feed" id="feed"></div>
+
+</div>
+
+<script>
+/* ---------------- content: your finished stimulus images ----------------
+   Each entry is one full stimulus screenshot. Add the remaining exemplars
+   (2 more political, 6 science) the same way once you have them — id must
+   be unique, domain drives the constrained shuffle, image is the filename
+   relative to this HTML file (keep images in the same folder when hosting). */
+const POSTS = [
+  { id: "pol_1", domain: "Political", image: "Post6.png", // G7 carbon fee
+    appUsed: "OpenAI Media Service API", issuedBy: "OpenAI OpCo, LLC.", issuedDate: "July 20, 2026" },
+  { id: "pol_2", domain: "Political", image: "Pol5.png",  // Bangladesh social-media tax
+    appUsed: "Google DeepMind Content Pipeline", issuedBy: "Google LLC", issuedDate: "July 28, 2026" },
+  { id: "pol_3", domain: "Political", image: "Pol4.png",  // US foreign aid cut
+    appUsed: "Adobe Firefly Generative Service", issuedBy: "Adobe Inc.", issuedDate: "August 2, 2026" },
+  { id: "pol_4", domain: "Political", image: "Pol3.png",  // G20 AI job-replacement tax
+    appUsed: "Midjourney Render Engine", issuedBy: "Midjourney, Inc.", issuedDate: "August 9, 2026" },
+  { id: "pol_5", domain: "Political", image: "Pol2.png",  // EU social-media ban under 16
+    appUsed: "Stability AI Media Toolkit", issuedBy: "Stability AI Ltd.", issuedDate: "August 14, 2026" },
+  { id: "pol_6", domain: "Political", image: "Pol1.png",  // US tariff on smartphones
+    appUsed: "Runway Gen Media Service", issuedBy: "Runway AI, Inc.", issuedDate: "August 19, 2026" },
+  { id: "sci_1", domain: "Science", image: "Sci1.png",    // AI life-expectancy prediction
+    appUsed: "Microsoft Designer AI Service", issuedBy: "Microsoft Corporation", issuedDate: "August 24, 2026" },
+  { id: "sci_2", domain: "Science", image: "Sci2.png",    // hair-regrowth patch (Health & Science)
+    appUsed: "Meta AI Content Studio", issuedBy: "Meta Platforms, Inc.", issuedDate: "August 29, 2026" },
+  { id: "sci_3", domain: "Science", image: "Sci3.png",    // Apple "iSphere" future-tech prototype
+    appUsed: "ByteDance Content Generation API", issuedBy: "ByteDance Ltd.", issuedDate: "September 3, 2026" },
+  { id: "sci_4", domain: "Science", image: "Sci4.png",    // LON-150 longevity gene therapy
+    appUsed: "Amazon Bedrock Media Service", issuedBy: "Amazon.com, Inc.", issuedDate: "September 8, 2026" },
+  { id: "sci_5", domain: "Science", image: "Sci5.png",    // self-healing phone screen
+    appUsed: "Grok Media Pipeline", issuedBy: "xAI Corp.", issuedDate: "September 14, 2026" },
+  { id: "sci_6", domain: "Science", image: "Sci6.png",    // Z-8 sleep-replacement pill
+    appUsed: "Canva Magic Media Service", issuedBy: "Canva Pty Ltd.", issuedDate: "September 20, 2026" },
+];
+const POSTS_BY_ID = Object.fromEntries(POSTS.map(p => [p.id, p]));
+
+
+/* ---------------- Qualtrics integration: read pid from the iframe URL ----------------
+   In Qualtrics, build the iframe src with piped text, e.g.:
+   https://yourhost.example.com/mock_feed.html?pid=${e://Field/ResponseID}
+   Tier is fixed at 1 for this phase (see TIER_COPY above), so there's nothing to pass in
+   for it right now; presence of a real pid is what signals "deployed" (hides the
+   researcher-only control bar) rather than a tier value. When tiers 2-4 come back, restore
+   the tier param and switch this back to checking it, same as before. */
+const urlParams = new URLSearchParams(window.location.search);
+const pid = urlParams.get("pid") || "preview";
+const deployedMode = urlParams.has("pid");
+
+/* ---------------- per-participant sequence randomization ----------------
+   No manual permutation matrices needed: the page derives a random-but-
+   deterministic order from the participant's own ID (pid), so the same
+   participant always sees the same order if the iframe reloads, but
+   different participants get different, independently-randomized orders.
+   Domain runs are capped (maxRun) so no one sees, say, 4 political posts
+   in a row purely by chance. */
+function hashStringToSeed(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return (h ^ (h >>> 16)) >>> 0;
+}
+function seededRandom(seed) {
+  // Mulberry32 PRNG - small, fast, no external dependency.
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function shuffleInPlace(arr, rng) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+function constrainedShuffle(items, rng, maxRun = 2) {
+  const byDomain = {};
+  items.forEach(p => { (byDomain[p.domain] = byDomain[p.domain] || []).push(p); });
+  const queues = Object.values(byDomain).map(arr => shuffleInPlace(arr.slice(), rng));
+
+  const order = [];
+  let lastDomain = null, runLen = 0;
+  while (order.length < items.length) {
+    const nonEmpty = queues.filter(q => q.length > 0);
+    const eligible = nonEmpty.filter(q => q[0].domain !== lastDomain || runLen < maxRun);
+    const pickFrom = eligible.length ? eligible : nonEmpty; // fallback if a domain runs out
+    const q = pickFrom[Math.floor(rng() * pickFrom.length)];
+    const item = q.shift();
+    runLen = (item.domain === lastDomain) ? runLen + 1 : 1;
+    lastDomain = item.domain;
+    order.push(item);
+  }
+  return order;
+}
+
+/* Two-domain case, solved properly: with unequal counts (e.g. 6 political vs 3 science),
+   a left-to-right greedy fill always exhausts the smaller group first, then has nothing
+   left to interleave with — dumping the whole surplus in one clump at the end, every time.
+   This computes where the surplus HAS to go up front (b+1 gaps around b separator items,
+   surplus spread across gaps as evenly as possible) so it lands as separate small pairs
+   distributed through the sequence instead of one long run. Falls back to the general
+   constrainedShuffle for the 0-domain/1-domain (nothing to interleave yet) or 3+-domain
+   (not part of this design) cases. */
+function evenlyInterleavedShuffle(items, rng) {
+  const byDomain = {};
+  items.forEach(p => { (byDomain[p.domain] = byDomain[p.domain] || []).push(p); });
+  const domainNames = Object.keys(byDomain);
+
+  if (domainNames.length !== 2) {
+    return constrainedShuffle(items, rng, 2); // 0/1/3+ domains: nothing meaningful to interleave
+  }
+
+  let [groupA, groupB] = domainNames.map(d => shuffleInPlace(byDomain[d].slice(), rng));
+  if (groupB.length > groupA.length) [groupA, groupB] = [groupB, groupA]; // groupA = larger (or equal)
+
+  const a = groupA.length, b = groupB.length;
+
+  if (a === b) {
+    // Equal counts: strict alternation is achievable and is the optimum (zero same-domain
+    // adjacencies). The general "spread the surplus across b+1 gaps" logic below assumes a
+    // genuine surplus (a > b) to anchor a trailing group at the end; at a === b there is no
+    // surplus, and that logic collapses to leaving one gap empty at a random position instead
+    // of the end, which can put two of the smaller group adjacent. Handle this case directly.
+    const order = [];
+    const groupAFirst = rng() < 0.5; // randomize which domain leads, per participant
+    for (let i = 0; i < a; i++) {
+      order.push(groupAFirst ? groupA[i] : groupB[i]);
+      order.push(groupAFirst ? groupB[i] : groupA[i]);
+    }
+    return order;
+  }
+
+  const slots = b + 1; // gaps created by placing b separators among groupA's items
+  const base = Math.floor(a / slots);
+  const remainder = a % slots; // this many gaps get one extra groupA item
+
+  const gapSizes = Array(slots).fill(base);
+  shuffleInPlace([...Array(slots).keys()], rng).slice(0, remainder).forEach(i => gapSizes[i]++);
+
+  const order = [];
+  let idx = 0;
+  for (let i = 0; i < slots; i++) {
+    for (let k = 0; k < gapSizes[i]; k++) order.push(groupA[idx++]);
+    if (i < groupB.length) order.push(groupB[i]);
+  }
+  return order;
+}
+
+const rng = seededRandom(hashStringToSeed(pid + "|feed_order"));
+const ORDERED_POSTS = evenlyInterleavedShuffle(POSTS, rng); // spreads a 6:3 (or any uneven) domain
+                                                             // split's surplus across the sequence
+                                                             // instead of clumping it at one end
+
+let currentTier = 1; // fixed for this phase — see TIER_COPY comment above
+const log = [];
+const dwellStart = {};
+const viewedPosts = new Set();
+let feedCompleteSent = false;
+
+function postToParent(type, extra) {
+  try {
+    if (window.parent) {
+      window.parent.postMessage({ source: "c2pa_mock_feed", type, pid, ...extra }, "*");
+    }
+  } catch (e) { /* no-op if parent is unreachable (e.g. standalone preview) */ }
+}
+
+function logEvent(type, detail) {
+  log.push({ t: Date.now(), type, ...detail });
+  renderLog();
+  // Push the full running log up on every event. Payloads here are tiny (a session's
+  // worth of taps/dwell events, not media), so sending on every event rather than
+  // batching keeps the Qualtrics side always up to date without added complexity.
+  postToParent("log_update", { log });
+}
+
+function renderPost(p) {
+  return `
+  <div class="post" data-id="${p.id}">
+    <div class="post-media">
+      <img src="${p.image}" alt="Stimulus post ${p.id}" draggable="false" />
+    </div>
+  </div>`;
+}
+
+function renderLog() {
+  // Log panel UI removed for participant-facing builds; log data still accumulates
+  // in memory and is still pushed to the parent window via postMessage in logEvent().
+}
+
+function init() {
+  const feed = document.getElementById("feed");
+  feed.innerHTML = ORDERED_POSTS.map(renderPost).join("");
+
+  // dwell time per post via IntersectionObserver (proxy for "scroll past" vs. lingering)
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const id = entry.target.dataset.id;
+      if (entry.isIntersecting) {
+        dwellStart[id] = Date.now();
+        viewedPosts.add(id);
+        logEvent("post_enter_view", { post: id, tier: currentTier });
+        if (!feedCompleteSent && viewedPosts.size === POSTS.length) {
+          feedCompleteSent = true;
+          postToParent("feed_complete", {});
+        }
+      } else if (dwellStart[id]) {
+        const dwellMs = Date.now() - dwellStart[id];
+        logEvent("post_exit_view", { post: id, tier: currentTier, dwell_ms: dwellMs });
+        delete dwellStart[id];
+      }
+    });
+  }, { threshold: 0.6 });
+  document.querySelectorAll(".post").forEach(p => observer.observe(p));
+
+  postToParent("ready", { tier: currentTier, order: ORDERED_POSTS.map(p => p.id) });
+}
+
+init();
+</script>
+</body>
+</html>
