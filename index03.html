@@ -538,6 +538,7 @@ const viewedPosts = new Set();
 let feedCompleteSent = false;
 
 function postToParent(type, extra) {
+  if (type === "ready" || type === "feed_complete") { dbLog(type, {}); if (type === "feed_complete") dbFlush(true); }
   try {
     if (window.parent) {
       window.parent.postMessage({ source: "c2pa_mock_feed", type, pid, ...extra }, "*");
@@ -545,7 +546,49 @@ function postToParent(type, extra) {
   } catch (e) { /* no-op if parent is unreachable (e.g. standalone preview) */ }
 }
 
+/* ---------------- MongoDB logging (added Nov 2026) ----------------
+   Sends every logEvent() to the Vercel endpoint -> MongoDB Atlas, in addition to
+   the existing postMessage stream to Qualtrics. Batched; flushed on page exit.
+   Condition = this file's name (e.g. "index02"), so each link is labelled automatically.
+   Optional URL param: &c=US or &c=BD for country. */
+const DB_ENDPOINT = "https://2pa-logging-vercel.vercel.app/api/log";
+const DB_CONDITION = (location.pathname.split("/").pop() || "index").replace(/\.html?$/, "");
+const DB_COUNTRY = urlParams.get("c");
+const DB_T0 = performance.now();
+let dbSeq = 0, dbBuffer = [];
+function dbLog(type, detail) {
+  try {
+    detail = detail || {};
+    const postId = detail.post || null;
+    const p = (postId && typeof POSTS_BY_ID !== "undefined") ? POSTS_BY_ID[postId] : null;
+    const idx = (postId && typeof ORDERED_POSTS !== "undefined") ? ORDERED_POSTS.findIndex(x => x.id === postId) : -1;
+    const v = typeof detail.opened === "boolean" ? detail.opened
+            : typeof detail.expanded === "boolean" ? detail.expanded : null;
+    dbBuffer.push({
+      session_id: pid, condition: DB_CONDITION, tier: currentTier, country: DB_COUNTRY,
+      event_type: type, post_id: postId, domain: p ? p.domain : null,
+      position: idx >= 0 ? idx + 1 : null, value: v,
+      duration_ms: typeof detail.dwell_ms === "number" ? detail.dwell_ms : null,
+      seq: dbSeq++, ts_client: Date.now(), t_rel_ms: Math.round(performance.now() - DB_T0)
+    });
+    if (dbBuffer.length >= 20) dbFlush();
+  } catch (e) { /* logging must never break the feed */ }
+}
+function dbFlush(useBeacon) {
+  if (!dbBuffer.length) return;
+  const blob = new Blob([JSON.stringify({ events: dbBuffer })], { type: "text/plain" });
+  dbBuffer = [];
+  try {
+    if (useBeacon && navigator.sendBeacon) navigator.sendBeacon(DB_ENDPOINT, blob);
+    else fetch(DB_ENDPOINT, { method: "POST", body: blob, keepalive: true }).catch(() => {});
+  } catch (e) {}
+}
+setInterval(dbFlush, 5000);
+addEventListener("pagehide", () => dbFlush(true));
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") dbFlush(true); });
+
 function logEvent(type, detail) {
+  dbLog(type, detail);
   log.push({ t: Date.now(), type, ...detail });
   renderLog();
   // Push the full running log up on every event. Payloads here are tiny (a session's
